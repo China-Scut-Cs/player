@@ -40,7 +40,6 @@ Widget::Widget(QWidget *parent)
     ui->btn_playmodel->setFocusPolicy(Qt::NoFocus);
     ui->btn_pre->setFocusPolicy(Qt::NoFocus);
     ui->btn_stop->setFocusPolicy(Qt::NoFocus);
-    //setWindowFlags(Qt::WindowCloseButtonHint | Qt::MSWindowsFixedSizeDialogHint);
     init_play();
     //获取键盘事件
     this->grabKeyboard();
@@ -171,7 +170,6 @@ void Widget::on_btn_open_clicked()
     m_strlist.clear();
     //获取用户选中的文件，并存入m_strlist
     m_strlist=QFileDialog::getOpenFileNames(this,"打开",".","allfiles(*.*);;");
-    //ui->listWidget->insertItems(ui->listWidget->count(),m_strlist);
     //遍历每一个文件，如果没添加过，就加入数据库和播放列表中，否则跳出警告信息，提示用户文件已存在
     foreach(QString const& arg,m_strlist)
     {
@@ -318,36 +316,13 @@ void Widget::updatePosition(qint64 position)
 {
     ui->positionslider->setValue(position);
     ui->time_label->setText(formatTime(position)+"/"+formatTime(m_player->duration()));
-    /*if(ui->positionslider->isSliderDown())
-    {
-        ui->positionslider->setValue(static_cast<int>(position));
-    }
-    updateTime(position/1000);*/
 }
 //获取总时长并设置滑块的步长
 void Widget::updateDuration(qint64 duration)
 {
     ui->positionslider->setRange(0, duration);
-    //ui->positionslider->setRange(0,static_cast<int>(duration));
     ui->positionslider->setPageStep(duration / 10);
 }
-
-/*void Widget::updateTime(qint64 position)
-{
-    QString str;
-    if(position || m_player->duration())
-    {
-        QTime curTime((position/3600)%60,(position/60)%60,position%60,(position*1000)%1000);
-        QTime totalTime((m_player->duration()/3600)%60,(m_player->duration()/60)%60,m_player->duration()%60,(m_player->duration()*1000)%1000);
-        QString format="mm:ss";
-        if(m_player->duration()>3600)
-            format="hh:mm:ss";
-        str=curTime.toString(format)+" / "+totalTime.toString(format);
-    }
-    ui->time_label->setText(str);
-}*/
-
-
 //停止
 void Widget::on_btn_stop_clicked()
 {
