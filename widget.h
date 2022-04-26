@@ -7,7 +7,6 @@
 #include <QMediaPlaylist>
 #include <QString>
 #include <QFileDialog>
-#include <QMouseEvent>
 #include <QKeyEvent>
 #include <QListWidgetItem>
 #include <QSqlDatabase>
