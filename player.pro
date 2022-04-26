@@ -26,21 +26,5 @@ FORMS += \
 qnx: target.path = /tmp/$${TARGET}/bin
 else: unix:!android: target.path = /opt/$${TARGET}/bin
 !isEmpty(target.path): INSTALLS += target
-win32: {
-    FFMPEG_HOME=C:\Users\a1834\Desktop\ffmpeg-5.0.1-full_build-shared
-    INCLUDEPATH += $$FFMPEG_HOME/include
 
-    #设置导入库的目录一边程序可以找到导入库
-    # -L ：指定导入库的目录
-    # -l ：指定要导入的 库名称
-    LIBS +=  -L$$FFMPEG_HOME/lib \
-             -lavcodec \
-             -lavdevice \
-             -lavfilter \
-            -lavformat \
-            -lavutil \
-            -lpostproc \
-            -lswresample \
-            -lswscale
-}
 
