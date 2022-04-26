@@ -6,6 +6,7 @@
 # Command: D:\qt\5.15.2\msvc2015_64\bin\qmake.exe -o Makefile player.pro -spec win32-msvc "CONFIG+=debug" "CONFIG+=qml_debug"
 #############################################################################
 
+
 MAKEFILE      = Makefile
 
 EQ            = =
