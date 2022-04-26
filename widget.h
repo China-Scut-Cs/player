@@ -73,8 +73,6 @@ private slots:
 protected:
     //键盘事件
     void keyPressEvent(QKeyEvent *event) override;
-    //void mousePressEvent(QMouseEvent *event) override;
-    //void mouseDoubleClickEvent(QMouseEvent *event) override;
 
 private:
     Ui::Widget *ui;
