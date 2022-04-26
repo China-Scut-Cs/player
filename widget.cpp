@@ -4,13 +4,12 @@
 #include <QInputDialog>
 #include <QTime>
 #include <QPalette>
-#include <QBoxLayout>
 #include <QSettings>
 #include <QtSql>
 #include <QSqlDatabase>
 #include <QMessageBox>
 #include <QDebug>
-#include <QDesktopWidget>
+
 
 Widget::Widget(QWidget *parent)
     : QWidget(parent)
