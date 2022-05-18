@@ -14,8 +14,9 @@ Rectangle {
         height: parent.height
         font.pixelSize: 30
         anchors.left: parent.left
-        anchors.leftMargin: 20
+        anchors.leftMargin: 45
         verticalAlignment: Text.AlignVCenter
         text: '自定义标题'
+        color: '#ffffff'
     }
 }

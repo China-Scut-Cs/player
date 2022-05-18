@@ -1,8 +1,31 @@
 <RCC>
     <qresource prefix="/">
         <file>main.qml</file>
+        <file>AVItem.qml</file>
         <file>Header.qml</file>
-        <file>SelfButton.qml</file>
         <file>Input.qml</file>
+        <file>PrimaryButton.qml</file>
+        <file>SearchInput.qml</file>
+        <file>Home.qml</file>
+        <file>VideoList.qml</file>
+        <file>AudioList.qml</file>
+        <file>VideoPlay.qml</file>
+        <file>ControlSection.qml</file>
+        <file>TitleSection.qml</file>
+    </qresource>
+    <qresource prefix="/asset">
+        <file>image/arrow-left-solid.svg</file>
+        <file>image/audio-icon.svg</file>
+        <file>image/backward-step-solid.svg</file>
+        <file>image/expand-solid.svg</file>
+        <file>image/forward-step-solid.svg</file>
+        <file>image/noFile.jpg</file>
+        <file>image/pause-solid.svg</file>
+        <file>image/play-solid.svg</file>
+        <file>image/plus-solid.svg</file>
+        <file>image/search.svg</file>
+        <file>image/trash-solid.svg</file>
+        <file>image/video-icon.svg</file>
+        <file>image/volume-high.svg</file>
     </qresource>
 </RCC>
