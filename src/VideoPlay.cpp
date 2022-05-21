@@ -25,6 +25,7 @@ int VideoPlay::videoDecode(void* arg) {
         if(player->quit) {
             break;
         }
+
         AVFrame *pFrameYUV = NULL;
         for(int i = 10; i > 0; i--) {
             pFrameYUV = av_frame_alloc();                           //保存输出24-bit RGB的PPM文件数据
@@ -70,6 +71,15 @@ int VideoPlay::videoDecode(void* arg) {
             SDL_UnlockMutex(VideoPlay::qlock);
             break;
         }
+        if (VideoPlay::pkt->data == player->flush_pkt->data) {//检查是否需要重新解码
+            avcodec_flush_buffers(player->vpCodecCtx);//重新解码前需要重置解码器
+            av_free(out_buffer);
+            av_frame_free(&pFrameYUV);
+            av_packet_unref(VideoPlay::pkt);
+            continue;
+        }
+
+
 
         int ret = avcodec_send_packet(player->vpCodecCtx, VideoPlay::pkt);
         if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
@@ -145,6 +155,10 @@ void VideoPlay::schedule_refresh(Player* player, int delay) {
 void VideoPlay::videoFresh(void* arg) {
     Player* player = (Player*)arg;
     if(player->vpCodecCtx) {         //判断文件是否已加载，避免想要触发刷新图像事件时由于文件还未加载而出错
+        if(player->stopPlay) {
+            VideoPlay::schedule_refresh(player, 10);
+            return;
+        }
         double delay;          //当前帧与上一帧的延时
         double ref_clock;
         double diff;            //当前帧与当前播放的音频间的时间差

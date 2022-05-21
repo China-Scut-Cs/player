@@ -5,6 +5,7 @@ AVPacket* AudioPlay::pkt = (AVPacket*)av_malloc(sizeof(AVPacket));
 AVFrame* AudioPlay::pFrame = av_frame_alloc();
 bool AudioPlay::end = true;
 double AudioPlay::audioClock = 0;
+int AudioPlay::frameNum=0;
 
 int AudioPlay::audioDecode(Player* player) {
     int dataSize = 0;
@@ -25,6 +26,8 @@ int AudioPlay::audioDecode(Player* player) {
                 return FAILED;
             }
 
+            frameNum++;
+            if(frameNum%player->speed) continue;
             int out_samples = swr_convert(player->swr_ctx, &player->audioBuffer, MAX_AUDIO_FRAME_SIZE,
                                           (const uint8_t **)pFrame->data,pFrame->nb_samples);
             if(out_samples > 0){
@@ -44,6 +47,10 @@ int AudioPlay::audioDecode(Player* player) {
             SDL_UnlockMutex(AudioPlay::qlock);
             return QUIT;
         }
+        if (AudioPlay::pkt->data == player->flush_pkt->data) {//检查是否需要重新解码
+            avcodec_flush_buffers(player->apCodecCtx);//重新解码前需要重置解码器
+            continue;
+        }
         ret = avcodec_send_packet(player->apCodecCtx, AudioPlay::pkt);
         if (ret < 0 && ret != AVERROR(EAGAIN) && ret != AVERROR_EOF) {
             return FAILED;
@@ -61,27 +68,32 @@ void AudioPlay::audio_callback(void* arg, Uint8 *stream, int len) {
     SDL_memset(stream, 0, len);
     SDL_Event event;
     while (len > 0) {       //检查音频缓存的剩余长度
-        if (player->audioBufferIndex >= player->audioBufferSize) {//检查是否需要执行解码操作
-            int ret = AudioPlay::audioDecode(player);
-            // 从缓存队列中提取数据包、解码，并返回解码后的数据长度，audioBuffer缓存中可能包含多帧解码后的音频数据
-            if (ret != SUCCESS) {             //检查解码操作是否成功
-                // 出错的话，全零重置缓冲区，将0送入声卡（即沉默）
-                player->audioBufferSize = 1024;
-                memset(player->audioBuffer, 0, player->audioBufferSize);//全零重置缓冲区
-                if(ret == FAILED) {
-                    event.type = AUDIO_FAILED_EVENT;
-                    SDL_PushEvent(&event);
+        if(player->stopPlay) {
+            player->audioBufferSize = 1024;
+            memset(player->audioBuffer, 0, player->audioBufferSize);//全零重置缓冲区
+            player->audioBufferIndex = 0;
+        }else {
+            if (player->audioBufferIndex >= player->audioBufferSize) {//检查是否需要执行解码操作
+                int ret = AudioPlay::audioDecode(player);
+                // 从缓存队列中提取数据包、解码，并返回解码后的数据长度，audioBuffer缓存中可能包含多帧解码后的音频数据
+                if (ret != SUCCESS) {             //检查解码操作是否成功
+                    // 出错的话，全零重置缓冲区，将0送入声卡（即沉默）
+                    player->audioBufferSize = 1024;
+                    memset(player->audioBuffer, 0, player->audioBufferSize);//全零重置缓冲区
+                    if(ret == FAILED) {
+                        event.type = AUDIO_FAILED_EVENT;
+                        SDL_PushEvent(&event);
+                    }
                 }
+                player->audioBufferIndex = 0;           //初始化累计写入缓存长度
             }
-            player->audioBufferIndex = 0;           //初始化累计写入缓存长度
         }
-
         length = player->audioBufferSize - player->audioBufferIndex;
         if (length > len) {             //检查每次写入缓存的数据长度是否超过指定长度(1024)
             length = len;               //指定长度从解码的缓存中取数据
         }
         //每次从解码的缓存数据中以指定长度抽取数据并送入声卡传递给声卡
-        SDL_MixAudio(stream, (uint8_t *)player->audioBuffer + player->audioBufferIndex, length, SDL_MIX_MAXVOLUME);
+        SDL_MixAudio(stream, (uint8_t *)player->audioBuffer + player->audioBufferIndex, length, /*SDL_MIX_MAXVOLUME*/ player->volume);
         len -= length;              //更新解码音频缓存的剩余长度
         stream += length;               //更新缓存写入位置
         player->audioBufferIndex += length;         //更新累计写入缓存数据长度        
@@ -92,7 +104,7 @@ double AudioPlay::get_audioClock(Player* player) {
     if(player->vpCodecCtx) {
         return AudioPlay::audioClock - (player->audioBufferSize - player->audioBufferIndex) / player->sampleRate;
     }
-    return AudioPlay::audioClock;
+    return AudioPlay::audioClock;    //单位为秒
 }
 
 void AudioPlay::Clear() {

@@ -23,6 +23,7 @@ public:
     int p_enqueue(AVPacket* pkt);            //进队列
     int p_dequeue(bool* quit, AVPacket* pkt, bool block);            //出队列
     void Clear();
+    void packet_queue_flush();
 };
 
 #endif // PACKETQUEUE_H

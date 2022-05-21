@@ -67,6 +67,7 @@ int PacketQueue::p_dequeue(bool* quit,AVPacket* pkt,bool block) {
 }
 
 void PacketQueue::Clear() {
+    //qDebug()<<"正常清理";
     SDL_CondBroadcast(p_qready);
     SDL_LockMutex(p_qlock);
     PacketList* pkl = head;
@@ -80,4 +81,36 @@ void PacketQueue::Clear() {
     delete tail;
     delete pkl;
     SDL_UnlockMutex(p_qlock);
+    //qDebug()<<"清除成功";
+}
+//清除队列缓存，释放队列中所有动态分配的内存
+
+void PacketQueue::packet_queue_flush() {
+//    PacketList *pkt, *pkttmp;//队列当前节点，临时节点
+
+//    SDL_LockMutex(p_qlock);//锁定互斥量
+//    for (pkt = head; pkt != NULL; pkt = pkttmp) {//遍历队列所有节点
+//        pkttmp = pkt->next;//队列头节点后移
+//        av_packet_unref(&pkt->packet);//当前节点引用计数-1
+//        av_freep(&pkt);//释放当前节点缓存
+//    }
+//    tail= NULL;//队列尾节点指针置零
+//    head= NULL;//队列头节点指针置零
+//    size= 0;//队列长度置零
+//    SDL_UnlockMutex(p_qlock);//互斥量解锁
+    SDL_CondBroadcast(p_qready);
+    SDL_LockMutex(p_qlock);
+    PacketList* pkl = head;
+    //qDebug()<<"size0="<<size;
+    while(size--) {
+        //qDebug()<<"size()="<<size;
+        head = head->next;
+        av_packet_unref(&pkl->packet);
+        av_free(pkl);
+        pkl = head;
+    }
+    head = tail = pkl = NULL;
+    size=0;
+    SDL_UnlockMutex(p_qlock);
+    //qDebug()<<"锁已经释放";
 }

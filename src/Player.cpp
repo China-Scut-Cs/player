@@ -14,7 +14,7 @@ Player::Player() : vfQueue(VIDEO_FRAME_QUEUE_SIZE) {
     audioBuffer = (uint8_t*)av_malloc((MAX_AUDIO_FRAME_SIZE*3)/2);
     audioBufferSize = 0;
     audioBufferIndex = 0;
-
+    volume=80;
 
     sws_ctx = NULL;
     vpCodecCtx = NULL;
@@ -34,6 +34,14 @@ Player::Player() : vfQueue(VIDEO_FRAME_QUEUE_SIZE) {
 
     StartPlay = NULL;
     VideoDecode = NULL;
+
+    seq_req=0;
+    seq_pos=0;
+    seq_flag=0;
+    flush_pkt=(AVPacket*)av_malloc(sizeof(AVPacket));
+
+    speed=1;
+    stopPlay=false;
 }
 
 Player::~Player() {
@@ -44,6 +52,7 @@ Player::~Player() {
     avcodec_close(vpCodecCtx);
 
     avformat_close_input(&pFormatCtx);
+    av_free(flush_pkt);
 }
 
 int Player::playerInit(char* filepath, int sw, int sh) {
@@ -199,6 +208,34 @@ int Player::startPlay(void *arg) {
         if(player->quit) {
             break;
         }
+        if(player->seq_req){
+
+            int stream_index=-1;
+            int64_t seq_target=player->seq_pos;
+
+            if(player->videoIndex>=0) stream_index=player->videoIndex;
+            else if(player->audioIndex>=0) stream_index=player->audioIndex;
+
+            if(stream_index>=0){
+                seq_target=av_rescale_q(seq_target,AV_TIME_BASE_Q,player->pFormatCtx->streams[stream_index]->time_base);
+            }
+            if(av_seek_frame(player->pFormatCtx,stream_index,seq_target,player->seq_flag)<0){
+                qDebug()<<"error\n";
+            }
+            else{
+                if(player->audioIndex>=0){
+                    player->apQueue.packet_queue_flush();
+                    player->apQueue.p_enqueue(player->flush_pkt);
+                }
+                if(player->videoIndex>=0){
+                    player->vpQueue.packet_queue_flush();
+                    player->vpQueue.p_enqueue(player->flush_pkt);
+                }
+
+            }
+            player->seq_req=0;
+        }
+
         if (player->apQueue.getSize() > MAX_AUDIOQ_SIZE || player->vpQueue.getSize() > MAX_VIDEOQ_SIZE) {
             SDL_Delay(10);
             continue;
@@ -228,8 +265,7 @@ int Player::Play() {
         return -1;
     }
 
-    screen = SDL_CreateWindow("视频播放器", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
-            screen_w, screen_h,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
+    screen = SDL_CreateWindow("视频播放器", SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED, screen_w, screen_h,SDL_WINDOW_OPENGL|SDL_WINDOW_RESIZABLE);
     if(!screen) {
         qDebug() << "SDL: 无法创建窗口";
         return FAILED;
@@ -237,6 +273,7 @@ int Player::Play() {
     sdlRenderer = SDL_CreateRenderer(screen, -1, 0);
 
     StartPlay = SDL_CreateThread(Player::startPlay,NULL,this);   //创建编码数据包解析线程
+    //Preview= SDL_CreateThread(vedioPreview,NULL,this);          //创建预览解析线程
     if (!StartPlay) {//检查线程是否创建成功
         return -1;
     }
@@ -258,6 +295,8 @@ int Player::Play() {
             // 把锁打开
             SDL_UnlockMutex(VideoPlay::qlock);
         }
+
+        double increase;
         switch(event.type) {
             case AUDIO_FAILED_EVENT:
             case VIDEO_FAILED_EVENT:
@@ -269,22 +308,132 @@ int Player::Play() {
                 this->apQueue.Clear();
                 this->vpQueue.Clear();
                 this->vfQueue.Clear();
-                AudioPlay::Clear();
-                VideoPlay::Clear();
+//                AudioPlay::Clear();
+//                VideoPlay::Clear();
                 SDL_CloseAudio();
                 SDL_Quit();
                 exit(0);
                 break;
             case REFRESH_EVENT:
-                VideoPlay::videoFresh(event.user.data1);//视频显示刷新事件响应函数
+                VideoPlay::videoFresh(event.user.data1);//视频显示刷新事件响应函数，计算同步
                 break;
             case SDL_WINDOWEVENT:
                 SDL_GetWindowSize(screen,&screen_w,&screen_h);
                 break;
-            default:
+            case SDL_KEYDOWN:
+                switch (event.key.keysym.sym) {//检查键盘操作类型，which key get hit
+                    case SDLK_LEFT://[左键]
+                       increase=-5.0;
+                       Jump::doSeek(increase,this);
+                        break;
+
+                    case SDLK_RIGHT://[右键]
+                        increase=5.0;
+                        Jump::doSeek(increase,this);
+                        break;
+
+                    case SDLK_SPACE://[空格]
+                        stopPlay=!stopPlay;
+                        break;
+
+                    case SDLK_UP:
+                        volume=fmin(100,volume+10);
+                        break;
+
+                    case SDLK_DOWN:
+                        volume=fmax(0,volume-10);
+                        break;
+                }
+                break;
+    
+             default:
                 break;
         }
     }
 
     return 0;
+}
+
+
+//与前端交互的函数
+void Player::receive_jump_time(int time){jump_time=time;}
+void Player::receive_preview_time(int time){preview_time=time;}
+void Player::receive_speed(int spd){speed=spd;}
+
+MediaInfo* Player::getMediaInfo(char* fileName){
+    MediaInfo* ans = new MediaInfo;
+    ans->filename = fileName;
+    int videoIndex = -1, audioIndex = -1;
+    AVFormatContext* pFormatCtx = avformat_alloc_context();          //分配空间
+    if (avformat_open_input(&pFormatCtx, fileName, NULL, NULL) != 0) {
+        qDebug() << "无法打开文件";
+        return NULL;
+    }
+    if (avformat_find_stream_info(pFormatCtx, NULL) < 0) {
+        qDebug() << "找不到流信息";
+        return NULL;
+    }
+
+    for (int i = 0; i < pFormatCtx->nb_streams; i++) {          //遍历文件中包含的所有流媒体类型(视频流、音频流、字幕流等)
+        if (pFormatCtx->streams[i]->codecpar->codec_type==AVMEDIA_TYPE_VIDEO) {             //若文件中包含有视频流
+            videoIndex=i;               //用视频流类型的标号修改标识，使之不为-1
+        }
+        if (pFormatCtx->streams[i]->codecpar->codec_type==AVMEDIA_TYPE_AUDIO) {             //若文件中包含有音频流
+            audioIndex=i;               //用音频流类型的标号修改标识，使之不为-1
+        }
+    }
+    if (audioIndex >= 0) {              //检查文件中是否存在音频流
+        const AVCodec *pCodec = NULL;
+        AVCodecContext *pCodecCtx = NULL;
+        AVCodecParameters *pCodecParam = pFormatCtx->streams[audioIndex]->codecpar;
+        pCodecCtx = avcodec_alloc_context3(NULL);
+        if (avcodec_parameters_to_context(pCodecCtx, pCodecParam) != 0) {
+            qDebug()<<"无法复制编码器上下文";
+            return NULL;
+        }
+        pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
+        if (!pCodec || (avcodec_open2(pCodecCtx, pCodec, NULL)<0)) {
+            qDebug()<<"不支持的解码器";
+            return NULL;
+        }
+        ans->aBitRate = pCodecCtx->bit_rate;
+        ans->aFormat = pCodec->long_name;
+        ans->chanelSize = pCodecCtx->channels;
+
+        avcodec_close(pCodecCtx);
+
+    }
+
+    if (videoIndex >= 0) {//检查文件中是否存在视频流
+        const AVCodec *pCodec = NULL;
+        AVCodecContext *pCodecCtx = NULL;
+        AVCodecParameters *pCodecParam = pFormatCtx->streams[videoIndex]->codecpar;
+        pCodecCtx = avcodec_alloc_context3(NULL);
+        if (avcodec_parameters_to_context(pCodecCtx, pCodecParam) != 0) {
+            qDebug()<<"无法复制编码器上下文";
+            return NULL;
+        }
+        pCodec = avcodec_find_decoder(pCodecCtx->codec_id);
+        if (!pCodec || (avcodec_open2(pCodecCtx, pCodec, NULL)<0)) {
+            qDebug()<<"不支持的解码器";
+            return NULL;
+        }
+
+        ans->vBitRate = pCodecCtx->bit_rate;
+        ans->vFormat = pCodec->long_name;
+        ans->vFrameRate = 1 / av_q2d(pFormatCtx->streams[videoIndex]->time_base) / 1000;
+        ans->width = pCodecCtx->width;
+        ans->height = pCodecCtx->height;
+        char* tmp1 = new char[20],*tmp2 = new char[20];
+        itoa(ans->width,tmp1,10);
+        itoa(ans->height,tmp2,10);
+        tmp1 = strcat(tmp1,"*");
+        const char* cc = static_cast<const char*>(tmp2);
+        ans->dpi = strcat(tmp1,cc);
+
+        avcodec_close(pCodecCtx);
+    }
+
+    avformat_close_input(&pFormatCtx);
+    return ans;
 }
